@@ -5,8 +5,12 @@ import {
   CallToolRequestSchema,
   ErrorCode,
   ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 interface Product {
   name: string;
@@ -56,11 +60,13 @@ class ProductInfoProcessor {
       {
         capabilities: {
           tools: {},
+          resources: {},
         },
       }
     );
 
     this.setupToolHandlers();
+    this.setupResourceHandlers();
     
     // Error handling
     this.server.onerror = (error: any) => console.error('[MCP Error]', error);
@@ -169,6 +175,70 @@ class ProductInfoProcessor {
     });
   }
 
+  private setupResourceHandlers() {
+    // List available resources
+    this.server.setRequestHandler(ListResourcesRequestSchema, async () => ({
+      resources: [
+        {
+          uri: 'file://example/processed_products.md',
+          name: 'Example Processed Products (Markdown)',
+          description: 'Example of structured markdown output showing properly formatted product information',
+          mimeType: 'text/markdown',
+        },
+        {
+          uri: 'file://example/product-info-formatted-output.html',
+          name: 'Example Product HTML Output',
+          description: 'Example of final HTML output showing formatted product information with styling',
+          mimeType: 'text/html',
+        },
+      ],
+    }));
+
+    // Read resource content
+    this.server.setRequestHandler(ReadResourceRequestSchema, async (request: any) => {
+      const uri = request.params.uri;
+      
+      try {
+        if (uri === 'file://example/processed_products.md') {
+          const content = readFileSync(join(process.cwd(), 'example', 'processed_products.md'), 'utf-8');
+          return {
+            contents: [
+              {
+                uri,
+                mimeType: 'text/markdown',
+                text: content,
+              },
+            ],
+          };
+        } else if (uri === 'file://example/product-info-formatted-output.html') {
+          const content = readFileSync(join(process.cwd(), 'example', 'product-info-formatted-output.html'), 'utf-8');
+          return {
+            contents: [
+              {
+                uri,
+                mimeType: 'text/html',
+                text: content,
+              },
+            ],
+          };
+        } else {
+          throw new McpError(
+            ErrorCode.InvalidRequest,
+            `Unknown resource: ${uri}`
+          );
+        }
+      } catch (error) {
+        if (error instanceof McpError) {
+          throw error;
+        }
+        throw new McpError(
+          ErrorCode.InternalError,
+          `Failed to read resource ${uri}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    });
+  }
+
   private async formatProductText(args: any) {
     if (!args || typeof args.rawText !== 'string') {
       throw new McpError(ErrorCode.InvalidParams, 'rawText parameter is required and must be a string');
@@ -247,54 +317,126 @@ class ProductInfoProcessor {
   }
 
   private parseRawTextToMarkdown(rawText: string): string {
-    const parseResult = this.enhancedParseRawText(rawText);
+    // Split input by product separators or use entire text as single product
+    const productTexts = this.splitIntoProducts(rawText);
+    let result = '';
     
-    if (parseResult.hasUnrecognizedContent) {
-      return this.generateSmartParsingResult(parseResult);
+    for (let i = 0; i < productTexts.length; i++) {
+      const productData = this.parseProductText(productTexts[i]);
+      result += `${i + 1}.  ${productData}\n\n`;
     }
     
-    return parseResult.structuredData;
+    return result.trim();
   }
 
-  private enhancedParseRawText(rawText: string): ParseResult {
+  private splitIntoProducts(rawText: string): string[] {
+    // First check if this is line-by-line format (no colons)
+    const lines = rawText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    const hasColonFormat = lines.some(line => line.includes('：') || line.includes(':'));
+    
+    // If it's line-by-line format, treat as single product
+    if (!hasColonFormat && lines.length > 1 && lines.length % 2 === 0) {
+      return [rawText];
+    }
+    
+    // Try to identify multiple products in the text for traditional format
+    // Look for patterns that might indicate product boundaries
+    const productSeparators = [
+      /\n\s*\d+[\.\)]\s*/g,  // Numbered list items
+      /\n\s*[一二三四五六七八九十]+[\.\)、]\s*/g,  // Chinese numbered items
+      /\n\s*产品\s*[：:]/g,  // "产品:" patterns
+      /\n\s*商品名称\s*[：:]/g  // Multiple product name patterns
+    ];
+    
+    // Check if text contains multiple products
+    for (const separator of productSeparators) {
+      const matches = rawText.match(separator);
+      if (matches && matches.length > 1) {
+        return rawText.split(separator).filter(text => text.trim().length > 0);
+      }
+    }
+    
+    // If no clear separators found, treat as single product
+    return [rawText];
+  }
+
+  private parseProductText(productText: string): string {
+    // First, check if this is the new line-by-line format
+    const lines = productText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    
+    // Check if it's the line-by-line format (no colons in attribute names)
+    const hasColonFormat = lines.some(line => line.includes('：') || line.includes(':'));
+    
+    if (!hasColonFormat && lines.length > 1 && lines.length % 2 === 0) {
+      // Parse line-by-line format where every pair of lines is attribute:value
+      let result = '';
+      for (let i = 0; i < lines.length; i += 2) {
+        const attrName = lines[i];
+        const attrValue = lines[i + 1];
+        
+        if (attrName && attrValue) {
+          result += `${attrName}：${attrValue}\n    `;
+        }
+      }
+      return result.trim();
+    } else {
+      // Use original colon-based parsing for traditional format
+      return this.parseTraditionalFormat(productText);
+    }
+  }
+
+  private parseTraditionalFormat(productText: string): string {
     const knownAttributes = [
       '商品名称', '规格', '包装方式', '材质', '保质期', '生产日期', '执行标准', 
-      '产品特点', '注意事项', '生产商', '备案人/生产商', '生产商地址', '备案人/生产商地址',
-      '型号规格', '成分', '功效成分', '总经销', '服务热线', '化妆品生产许可证编号',
+      '产品特点', '注意事项', '生产商', '备案人/生产商', '生产商地址', '生产商地址',
+      '型号规格', '型号', '成分', '功效成分', '总经销', '服务热线', '化妆品生产许可证编号',
       '产地', '制造商', '电话', '产品型号', '额定功率', '额定电压', '额定电流',
-      '产品尺寸', '产品净重', '清洗槽容积'
+      '产品尺寸', '产品净重', '清洗槽容积', '净含量', '有效日期', '功效', '其他微量成分',
+      '防龋功效成分', '贮存条件', '产品执行的标准编号', '生产许可证编号', '备案人/生产企业',
+      '外文名称', '生产地址', '闭合尺寸', '展开尺寸', '附件', '医疗器械分类',
+      '医疗器械备案凭证编号', '生产备案凭证编号', '附加说明', '尺寸', '品牌', '自重',
+      '壁厚', '加工定制', '是否跨境出口专供货源', '高度', '货号', '用途', '口径',
+      '配盖', '可否印LOG', '主体直径', '容量', '成品外包装', '塑料品种', '纯料与再生料比例'
     ];
 
-    // Extract known attributes
-    const extractedMatches: AttributeMatch[] = [];
-    let structuredResult = '1.  ';
+    let result = '';
+    const processedText = productText.replace(/\s+/g, ' ').trim();
+    
+    // Extract product name first (if exists)
+    const nameMatch = processedText.match(/(?:商品名称|产品名称)[：:]\s*([^：:，。！？\n]+)/);
+    if (nameMatch) {
+      result += `商品名称：${nameMatch[1].trim()}\n    `;
+    }
 
+    // Extract all other attributes
     for (const attr of knownAttributes) {
-      const pattern = new RegExp(`${attr}[：:]\\s*([^${knownAttributes.join('')}]*?)(?=\\s*(?:${knownAttributes.join('|')})[：:]|$)`, 'g');
-      const match = pattern.exec(rawText);
+      if (attr === '商品名称') continue; // Already processed
+      
+      const pattern = new RegExp(`${attr}[：:]\\s*([^：:]*?)(?=\\s*(?:${knownAttributes.join('|')})[：:]|$)`, 'g');
+      let match = pattern.exec(processedText);
+      
       if (match && match[1]) {
-        const value = match[1].trim();
-        if (value) {
-          structuredResult += `${attr}：${value}\n    `;
-          extractedMatches.push({
-            name: attr,
-            value: value,
-            startIndex: match.index,
-            endIndex: match.index + match[0].length
-          });
+        let value = match[1].trim();
+        // Clean up the value - remove trailing punctuation and extra spaces
+        value = value.replace(/[，。！？]+$/, '').trim();
+        if (value && value.length > 0) {
+          result += `${attr}：${value}\n    `;
         }
       }
     }
 
-    // Detect unrecognized content
-    const unrecognizedContent = this.detectUnrecognizedContent(rawText, extractedMatches);
-    const processingHints = this.generateProcessingHints(unrecognizedContent, rawText);
+    return result.trim();
+  }
 
+  private enhancedParseRawText(rawText: string): ParseResult {
+    // This method is kept for backward compatibility but simplified
+    const structuredData = this.parseRawTextToMarkdown(rawText);
+    
     return {
-      structuredData: structuredResult.trim(),
-      unrecognizedContent,
-      hasUnrecognizedContent: unrecognizedContent.length > 0,
-      processingHints
+      structuredData,
+      unrecognizedContent: [],
+      hasUnrecognizedContent: false,
+      processingHints: []
     };
   }
 
@@ -627,14 +769,15 @@ class ProductInfoProcessor {
         const product: Product = { name: '', attributes: {} };
         const lines = block.split('\n');
         
-        // Extract product name from first line
+        // Extract product name from first line or determine from attributes
         const firstLine = lines[0].trim();
         const productNameMatch = firstLine.match(/商品名称[：:]\s*(.+)/);
         if (productNameMatch) {
           product.name = productNameMatch[1].trim();
         } else {
           // If no explicit product name, use the first line after the number
-          product.name = firstLine.replace(/^\d+\.\s*/, '').trim();
+          const fallbackName = firstLine.replace(/^\d+\.\s*/, '').trim();
+          product.name = fallbackName || '产品信息';
         }
         
         // Extract attributes from remaining lines
@@ -650,6 +793,35 @@ class ProductInfoProcessor {
             const attrName = attrMatch[1].trim();
             const attrValue = attrMatch[2].trim();
             product.attributes[attrName] = attrValue;
+            
+            // Intelligently determine product name from key attributes
+            if (product.name === '产品信息' || product.name === '') {
+              if (attrName === '商品名称' || attrName === '产品名称') {
+                product.name = attrValue;
+              } else if (attrName === '品牌' && product.attributes['用途']) {
+                product.name = `${attrValue} ${product.attributes['用途']}`;
+              } else if (attrName === '用途' && product.attributes['品牌']) {
+                product.name = `${product.attributes['品牌']} ${attrValue}`;
+              } else if (attrName === '用途' && !product.attributes['品牌']) {
+                product.name = attrValue;
+              } else if (attrName === '规格' && attrValue.includes('桶')) {
+                product.name = attrValue.split(',')[0]; // Use first specification
+              }
+            }
+          }
+        }
+        
+        // Final fallback for product name
+        if (!product.name || product.name === '产品信息') {
+          const keyAttrs = ['品牌', '用途', '规格', '型号', '货号'];
+          for (const attr of keyAttrs) {
+            if (product.attributes[attr]) {
+              product.name = product.attributes[attr];
+              break;
+            }
+          }
+          if (!product.name) {
+            product.name = '产品信息';
           }
         }
         
@@ -661,6 +833,7 @@ class ProductInfoProcessor {
   }
 
   private generateHtml(products: Product[]): string {
+    // Generate complete HTML document matching the example format
     const htmlTemplate = `<html>
 <head>
     <meta charset="UTF-8">
@@ -672,33 +845,31 @@ class ProductInfoProcessor {
     </div>
 </body>
 </html>`;
-    
-    const productTemplate = `
-        <div class="product-info" style="background: #fff; border: 1px solid #e9ecef; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+
+    const productTemplate = `<div class="product-info" style="background: #fff; border: 1px solid #e9ecef; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
             <h4 style="color: #333; margin-bottom: 12px; font-size: 16px;">{product_name}</h4>
             <ul style="list-style: none; padding: 0; margin: 0;">
                 {attributes_html}
             </ul>
         </div>`;
     
-    const attributeTemplate = `
-                <p style="margin: 6px 0;"> <strong style="color: #666;">{attr_name}:</strong> <span style="color: #333;">{attr_value}</span> </p>`;
+    const attributeTemplate = `<p style="margin: 6px 0;"> <strong style="color: #666;">{attr_name}:</strong> <span style="color: #333;">{attr_value}</span> </p>`;
     
     let productsHtml = '';
     for (const product of products) {
       let attributesHtml = '';
       for (const [attrName, attrValue] of Object.entries(product.attributes)) {
-        attributesHtml += attributeTemplate
+        attributesHtml += '                ' + attributeTemplate
           .replace('{attr_name}', attrName)
-          .replace('{attr_value}', attrValue);
+          .replace('{attr_value}', attrValue) + '\n';
       }
       
       productsHtml += productTemplate
         .replace('{product_name}', product.name)
-        .replace('{attributes_html}', attributesHtml);
+        .replace('{attributes_html}', attributesHtml.trim()) + '\n        ';
     }
     
-    return htmlTemplate.replace('{products_html}', productsHtml);
+    return htmlTemplate.replace('{products_html}', productsHtml.trim());
   }
 
   async run() {
