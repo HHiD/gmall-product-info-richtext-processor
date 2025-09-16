@@ -1,51 +1,115 @@
 # Product Info Processor MCP Server
 
-A Model Context Protocol (MCP) server for processing product information from raw text to formatted HTML. This server automates the workflow of parsing product descriptions and generating professional-looking HTML output.
+A simplified Model Context Protocol (MCP) server for processing product information from raw text to formatted HTML using a clean two-step workflow.
 
-## Features
+## 🎯 Architecture Overview
 
-- **Format Product Text**: Convert raw product text into structured markdown format
-- **Generate HTML**: Transform structured product markdown into styled HTML
-- **Complete Workflow**: Process raw text and generate HTML in one step
-- **Chinese Product Support**: Optimized for Chinese product information with attributes like 商品名称, 规格, 材质, etc.
+This MCP follows a **simplified two-step process**:
 
-## Tools Available
+1. **Step 1**: AI model analyzes raw text using markdown template → generates structured JSON
+2. **Step 2**: Simple script converts JSON → formatted HTML
 
-### 1. `format_product_text`
-Formats raw product text into structured markdown format.
+This approach leverages AI's natural language processing capabilities while keeping the MCP server simple and focused.
+
+## 🚀 Features
+
+- **Clean Two-Step Workflow**: Separation between AI parsing and HTML formatting
+- **Multiple Input Formats**: Supports both colon-separated and line-by-line product formats
+- **Standalone Script**: Alternative JSON-to-HTML converter for flexibility
+- **Template-Driven**: Uses markdown templates to guide AI parsing
+- **Chinese Product Support**: Optimized for Chinese product information
+- **External Caller Support**: Fixed resource path resolution for reliable external access
+
+## 🛠️ Available Tools
+
+### 1. `parse_raw_text_to_json`
+Parses raw product text and returns structured JSON following the markdown template format.
 
 **Parameters:**
 - `rawText` (string, required): Raw text containing product information
 
-**Example:**
-```javascript
+**Example Input:**
+```
+品牌
+上海品磊
+自重
+1.5-10
+壁厚
+2.5
+```
+
+**Example Output:**
+```json
 {
-  "rawText": "商品名称：正畸咬胶 包装方式：盒装 材质：食品级硅胶..."
+  "products": [
+    {
+      "name": "收纳桶",
+      "attributes": {
+        "品牌": "上海品磊",
+        "自重": "1.5-10",
+        "壁厚": "2.5"
+      }
+    }
+  ]
 }
 ```
 
-### 2. `generate_product_html`
-Generates formatted HTML from structured product markdown.
+### 2. `convert_json_to_html`
+Converts structured product JSON to formatted HTML.
 
 **Parameters:**
-- `markdownContent` (string, required): Structured markdown content with product information
+- `productsJson` (string, required): JSON string containing structured product data
 
-### 3. `process_product_workflow`
-Complete workflow: formats raw text and generates HTML in one step.
+## 📚 Available Resources
 
-**Parameters:**
-- `rawText` (string, required): Raw text containing product information
+The MCP provides template resources for consistent formatting:
 
-## Installation
+1. **`file://example/processed_products.md`** - Markdown template showing expected format
+2. **`file://example/product-info-formatted-output.html`** - HTML template showing output format  
+3. **`file://schema/product-schema.json`** - JSON schema defining data structure
+
+## 📋 Usage Documentation
+
+**For Users and AI Assistants:**
+- **[QUICK-START-PROMPTS.md](QUICK-START-PROMPTS.md)** - Ready-to-copy prompts for immediate use
+- **[USAGE-GUIDE.md](USAGE-GUIDE.md)** - Comprehensive guide with troubleshooting
+- **[README-SIMPLIFIED.md](README-SIMPLIFIED.md)** - Technical architecture details
+
+## 🤖 Recommended Usage Prompt
+
+When using this MCP, use this prompt to ensure proper workflow:
+
+```
+IMPORTANT: This MCP requires a specific two-step workflow. Please follow exactly:
+
+STEP 1 - MANDATORY: Access the template first
+- Use access_mcp_resource with file://example/processed_products.md
+- Study the format to understand how product data should be structured
+
+STEP 2: Parse my raw text to JSON
+- Use parse_raw_text_to_json tool with the raw text I provide below
+- Generate structured JSON following the template format
+
+STEP 3: Convert JSON to HTML
+- Use convert_json_to_html tool with the JSON from step 2
+- Show me the final formatted HTML
+
+DO NOT skip steps. DO NOT try to do everything at once. Follow the workflow exactly.
+
+Here's my raw product text:
+[PASTE YOUR PRODUCT TEXT HERE]
+```
+
+## 🔧 Installation
 
 ### Prerequisites
 - Node.js (version 16 or higher)
 - npm
 
-### Step 1: Clone or Download
+### Step 1: Clone the Repository
 ```bash
-git clone <repository-url>
-cd product-info-processor
+git clone https://github.com/HHiD/gmall-product-info-richtext-processor.git
+cd gmall-product-info-richtext-processor
 ```
 
 ### Step 2: Install Dependencies
@@ -59,8 +123,7 @@ npm run build
 ```
 
 ### Step 4: Configure MCP Settings
-Add the server to your Cline MCP settings file located at:
-`~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`
+Add the server to your MCP client configuration:
 
 ```json
 {
@@ -68,38 +131,111 @@ Add the server to your Cline MCP settings file located at:
     "product-info-processor": {
       "command": "node",
       "args": ["/path/to/product-info-processor/build/index.js"],
-      "disabled": false,
-      "autoApprove": []
+      "disabled": false
     }
   }
 }
 ```
 
-### Step 5: Restart Cline
-Restart Cline to load the new MCP server.
+### Step 5: Restart Your MCP Client
+Restart your MCP client (e.g., Cline) to load the new server.
 
-## Usage Examples
+## 💡 Usage Examples
 
-Once installed, you can use the server through Cline:
-
-### Format Product Text
+### Example 1: Line-by-Line Format
 ```
-Please format this product information:
-商品名称：正畸咬胶 包装方式：盒装 材质：食品级硅胶 执行标准：GB4806.11-2016 合格
+Input:
+品牌
+上海品磊
+自重
+1.5-10
+用途
+收纳桶
+
+Output JSON:
+{
+  "products": [
+    {
+      "name": "收纳桶",
+      "attributes": {
+        "品牌": "上海品磊",
+        "自重": "1.5-10",
+        "用途": "收纳桶"
+      }
+    }
+  ]
+}
 ```
 
-### Generate Complete HTML
+### Example 2: Colon-Separated Format
 ```
-Please process this product information and generate HTML:
-商品名称：正畸咬胶 包装方式：盒装 材质：食品级硅胶 保质期：3年 型号规格：HR-008
+Input:
+商品名称：硅胶洗漱包
+规格：单支装
+材质：硅胶
+
+Output JSON:
+{
+  "products": [
+    {
+      "name": "硅胶洗漱包",
+      "attributes": {
+        "规格": "单支装",
+        "材质": "硅胶"
+      }
+    }
+  ]
+}
 ```
 
-## Supported Product Attributes
+## 🔧 Alternative: Standalone Script
 
-The server recognizes and processes the following Chinese product attributes:
+For non-MCP usage, use the standalone converter:
+
+```bash
+# Convert JSON file to HTML
+node scripts/json-to-html.js products.json output.html
+
+# Use with pipes
+cat products.json | node scripts/json-to-html.js - output.html
+```
+
+## 📁 Project Structure
+
+```
+product-info-processor/
+├── src/
+│   └── index.ts                    # Main MCP server implementation
+├── scripts/
+│   └── json-to-html.js            # Standalone JSON→HTML converter
+├── example/
+│   ├── processed_products.md       # Markdown template for AI
+│   ├── products-example.json       # Example JSON structure
+│   └── product-info-formatted-output.html  # HTML template
+├── test_input/                     # Test data files
+├── test_output/                    # Generated test results
+├── build/                          # Compiled JavaScript
+├── USAGE-GUIDE.md                  # Comprehensive usage guide
+├── QUICK-START-PROMPTS.md          # Ready-to-copy prompts
+├── README-SIMPLIFIED.md            # Technical architecture details
+└── README.md                       # This file
+```
+
+## 🎯 Benefits of Simplified Architecture
+
+1. **Cleaner Code**: Reduced complexity from ~600 to ~350 lines
+2. **Better Separation**: AI handles parsing, script handles formatting
+3. **Easier Testing**: Each component can be tested independently
+4. **More Flexible**: JSON intermediate format allows different output formats
+5. **Maintainable**: Simple, focused functions are easier to debug and extend
+6. **Reliable**: Fixed external caller resource access issues
+
+## 🔍 Supported Product Attributes
+
+The server recognizes and processes common Chinese product attributes:
 
 - 商品名称 (Product Name)
-- 规格 (Specifications)
+- 规格 (Specifications)  
 - 材质 (Material)
 - 保质期 (Shelf Life)
 - 生产日期 (Production Date)
@@ -108,56 +244,54 @@ The server recognizes and processes the following Chinese product attributes:
 - 注意事项 (Precautions)
 - 生产商 (Manufacturer)
 - 生产商地址 (Manufacturer Address)
-- 备案人 (Record Holder)
 - 包装方式 (Packaging Method)
 - 型号规格 (Model Specifications)
 - 成分 (Ingredients)
-- 功效成分 (Active Ingredients)
-- 总经销 (General Distributor)
-- 服务热线 (Service Hotline)
-- 化妆品生产许可证编号 (Cosmetics Production License Number)
 - 产地 (Origin)
-- 制造商 (Manufacturer)
-- 电话 (Phone)
-- 产品型号 (Product Model)
-- 额定功率 (Rated Power)
-- 额定电压 (Rated Voltage)
-- 额定电流 (Rated Current)
-- 产品尺寸 (Product Dimensions)
-- 产品净重 (Net Weight)
-- 清洗槽容积 (Cleaning Tank Capacity)
+- And many more...
 
-## HTML Output Style
+## 🎨 HTML Output Style
 
-The generated HTML includes professional styling with:
-- Clean card-based layout
-- Rounded borders and proper spacing
-- Professional color scheme
+The generated HTML includes:
+- Clean card-based layout with rounded borders
+- Professional color scheme (gray borders, styled text)
+- Proper spacing and typography
 - Responsive design elements
-- Easy-to-read typography
+- Easy-to-read attribute formatting
 
-## Development
+## 🔧 Development
 
 ### Scripts
 - `npm run build`: Build the TypeScript code
-- `npm run dev`: Watch mode for development
+- `npm run dev`: Watch mode for development (if configured)
 - `npm start`: Start the server
 
-### Project Structure
-```
-product-info-processor/
-├── src/
-│   └── index.ts          # Main server implementation
-├── build/                # Compiled JavaScript
-├── package.json
-├── tsconfig.json
-└── README.md
-```
+### Testing
+Test files are included in `test_input/` and `test_output/` directories with real product data examples.
 
-## License
+## 🚀 Migration from Complex Version
+
+This simplified version replaces the previous complex implementation with:
+- Reduced code complexity (from ~600 to ~350 lines)
+- Better error handling and resource path resolution
+- Cleaner separation between AI parsing and HTML formatting
+- More reliable external caller support
+
+## 📄 License
 
 MIT License
 
-## Contributing
+## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit issues and pull requests.
+
+## 📞 Support
+
+For issues or questions:
+1. Check the [USAGE-GUIDE.md](USAGE-GUIDE.md) for troubleshooting
+2. Use the prompts in [QUICK-START-PROMPTS.md](QUICK-START-PROMPTS.md)
+3. Submit an issue on GitHub
+
+## 🔗 Repository
+
+GitHub: [HHiD/gmall-product-info-richtext-processor](https://github.com/HHiD/gmall-product-info-richtext-processor)
