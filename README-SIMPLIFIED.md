@@ -155,3 +155,36 @@ npm run build
    - Output: Formatted HTML
 
 This approach leverages the AI model's natural language processing capabilities while keeping the MCP server simple and focused.
+
+## 📚 Usage Documentation
+
+**For Users and AI Assistants**:
+- **[QUICK-START-PROMPTS.md](QUICK-START-PROMPTS.md)** - Ready-to-copy prompts for immediate use
+- **[USAGE-GUIDE.md](USAGE-GUIDE.md)** - Comprehensive guide with troubleshooting
+
+**Important**: When sharing this MCP with others, make sure they use the provided prompts to ensure their AI follows the correct workflow.
+
+## 🤖 Recommended Prompt for Others
+
+When sharing this MCP, include this prompt:
+
+```
+IMPORTANT: This MCP requires a specific two-step workflow. Please follow exactly:
+
+STEP 1 - MANDATORY: Access the template first
+- Use access_mcp_resource with file://example/processed_products.md
+- Study the format to understand how product data should be structured
+
+STEP 2: Parse my raw text to JSON
+- Use parse_raw_text_to_json tool with the raw text I provide below
+- Generate structured JSON following the template format
+
+STEP 3: Convert JSON to HTML
+- Use convert_json_to_html tool with the JSON from step 2
+- Show me the final formatted HTML
+
+DO NOT skip steps. DO NOT try to do everything at once. Follow the workflow exactly.
+
+Here's my raw product text:
+[PASTE YOUR PRODUCT TEXT HERE]
+```
